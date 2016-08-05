@@ -1,0 +1,21 @@
+@charset "UTF-8";
+
+.jconfirm .jconfirm-box{
+	box-shadow:none!important;
+	border:1px solid rgba(0, 153, 204, 0.69)!important;
+	border-radius:0!important;
+}
+
+.jconfirm .jconfirm-box div.title{
+	font-size:14px;
+}
+
+.jconfirm .jconfirm-box div.content{
+	text-align:center;
+}
+
+.jconfirm .jconfirm-box .buttons button{
+	width:80px!important;
+	padding-top:5px!important;
+	padding-bottom:5px!important;
+}

@@ -1,0 +1,12 @@
+1.安装，比如我要跑起来开发者模块，那么：
+	a：cmd开两个命令行窗口，分别进入web-dev路径
+	b:第一个窗口执行npm install，安装依赖，有可能很长时间，有可能失败，多来几次
+	c:npm install成功以后，第一个窗口执行npm run mock，启动mock测试服务器
+	d：第二个窗口执行npm start启动web服务器
+
+	
+	
+2.如果要测试api联调，比如调试开发者模块，那么
+	a：打开web-dev/src文件夹下的config.js文件
+	b：配置第4行代码：apiServer : 'http://localhost:3000/',修改为自己的api服务器路径
+	c:修改第5行publish，配置true即可

@@ -1,0 +1,570 @@
+<template>
+	<div class="adm-adv-data">
+
+		<div class="search-bar clearfix">
+
+			<div class="crumbs pull-left">
+				<h4 class="pull-left crumbs-title">数据管理</h4>
+			</div>
+		
+    		<div class="form-group pull-right">
+				<input id="date_range" type="text" v-model="dateRange" class="form-control" read-only="readOnly" placeholder="请选择日期">
+    		</div>
+			<!-- 创意 -->
+			<div class="form-group pull-right">
+				<select class="form-control" v-model="creativeId" @change="load">
+					<option v-for="creative in creatives" value="{{creative.id}}">{{creative.text}}</option>
+				</select>
+			</div>
+			<!-- 计划 -->
+			<div class="form-group pull-right">
+				<select class="form-control" v-model="campaignId" @change="loadCreative">
+					<option v-for="plan in plans" value="{{plan.id}}">{{plan.text}}</option>
+				</select>
+			</div>
+			<!-- 广告主下拉 -->
+			<div class="form-group pull-right">
+				<select class="form-control" v-model="advId" @change="loadPlans">
+					<option v-for="adv in advs" value="{{adv.id}}">{{adv.text}}</option>
+				</select>
+			</div>
+		</div>
+		
+		<div class="chart-bar">
+		
+			<div v-show="advId!='-1'" id="chart" class="chart-cnt"></div>
+		
+			<div v-show="advId=='-1'" class="chart-empty">抱歉，暂无数据！</div>
+			
+		</div>
+		
+		<table class="table table-bordered table-striped table-hover table-condensed">
+			<thead>
+			  <tr>
+				<th class="text-center">日期</th>
+				<th class="text-center">广告主名称</th>
+				<th class="text-right">展现数（次）</th>
+				<th class="text-right">点击数（次）</th>
+				<th class="text-right">点击消费（￥）</th>
+				<!-- <th class="text-right">下载消费（￥）</th> -->
+				<th class="text-right">千次展现消费（￥）</th>
+			  </tr>
+			</thead>
+			<tbody>
+			  <tr v-if="results.length > 0" v-for="(index,result) in results" class="row-data row-{{index%2==0 ? 'old' : 'even'}}">
+				<td>{{result.date | datetime}}</td>
+				<td class="text-center">{{result.advName}}</td>
+				<td class="text-right">{{result.numOfAdImpressions | amount 0}}</td>
+				<td class="text-right">{{result.numOfAdClicks | amount 0}}</td>
+				<td class="text-right">{{result.chargeOfClicks | currency '￥'}}</td>
+				<!-- <td class="text-right">{{result.chargeOfImpressions | amount}}</td> -->
+				<td class="text-right">{{result.cpm | currency '￥'}}</td>
+			  </tr>
+			</tbody>
+		</table>
+
+		<div class="pager-box">
+		
+			<pager :page-size.sync="pageSize" :page-no.sync="pageNum" :total-records.sync="total"></pager>
+		
+			<a v-if="results.length > 0" href={{exportURL}} target="_blank" class="btn btn-primary btn-common btn-export">导出Excel</a>
+
+		
+		</div>
+		
+		<div v-if="results.length == 0" class="search-empty">抱歉，暂无数据！</div>
+	  
+	</div>
+
+</template>
+
+<script>
+	import ApiUtil from './../../../util/api';
+
+	import echarts from 'echarts';
+	
+  	import Pager from '../../../components/Pager.vue';
+  	
+	module.exports = {
+		props: {
+		},
+		components:{
+			'pager':Pager
+		},
+		data : function() {
+		  return {
+		  	anyCreative:{id:"-1",text:"请选择创意"},
+		  	anyPlan:{id:"-1",text:"请选择推广计划"},
+		  	anyAdv:{id:'-1',text:'请选择广告主名称'},
+		  	empty:{id:"-1",text:"暂无数据"},
+		  	wait:{id:"-1",text:"加载中,请稍后..."},
+		  	creatives:[{id:"-1",text:"请选择创意"}],
+		  	plans:[{id:"-1",text:"请选择推广计划"}],
+		  	advs:[],
+		  	creativeId:'-1',
+		  	campaignId:"-1",
+		  	advId:"-1",
+		  	adslotId:[],
+		  	///////////////////////表格相关
+			pageNum:1,
+			pageSize:10,
+			total:-1,
+			results:[],
+			////////////////////图表相关
+			charts:[],
+			///////////////////////日期控件
+            endDate: (new Date()).getTime(),
+            startDate: (new Date()).getTime()-7*24*60*60*1000
+		  };
+		},
+		computed:{
+		
+			dateRange:function(){
+				
+				var startDate=new Date(this.startDate);
+				
+				var endDate=new Date(this.endDate);
+				
+				return moment(startDate).format("YYYY-MM-DD")+" / "+moment(endDate).format("YYYY-MM-DD");
+			},
+			exportURL:function(){
+				
+				var url=ApiUtil.url('/v1/adm/adv/stats/creativeOfDay/'+this.campaignId+'/'+this.creativeId+'/export');
+
+				var params=[];
+				
+				if(this.startDate)
+					params.push("startDate="+this.startDate);
+					
+				if(this.endDate)
+					params.push("endDate="+this.endDate);
+	
+				if(params.length)
+					url+="?"+params.join("&");
+					
+				return url;
+			}
+		},
+		ready : function() {
+	
+			var self=this;
+			
+			$("#date_range").daterangepicker({
+				locale:{
+					applyLabel: '确定',
+            		cancelLabel: '取消'
+            	},
+            	startDate:new Date(this.startDate),
+            	endDate:new Date(this.endDate)
+			}).on("apply.daterangepicker",function(e,ui){
+				
+				self.startDate=ui.startDate.toDate().getTime();
+				
+				self.endDate=ui.endDate.toDate().getTime();
+		
+				self.load();
+				
+			});
+			
+			this.loadAdvs();
+		},
+		beforeDestory:function(){
+	
+			this.unmask();
+	
+		},
+		events:{
+			//注册翻页事件
+			page:function(){
+			
+				this.page();
+			
+			}
+		},
+		methods:{
+			//遮罩
+			mask:function(){
+				
+				$(document.body).mask();
+		
+			},
+			//遮罩
+			unmask:function(){
+				
+				$(document.body).unmask();
+			
+			},
+			//补0函数
+			rpad:function(v){
+				return v < 10 ? "0"+v : v;
+			},
+			//格式化日期
+			formatDate:function(date){
+				
+				return date.getFullYear()+"-"+this.rpad(date.getMonth()+1)+"-"+this.rpad(date.getDate());
+			},
+			//加载所有的广告主名称
+			loadAdvs:function(){
+						
+				this.advs=[this.wait];
+		
+				this.mask();
+				
+				this.$http.get('/v1/adm/names/advs').then(function(res){
+					
+					this.unmask();
+					
+					var data=res.data;
+					
+					if(data.ret!=1)
+						return;
+					
+					var result=[this.anyAdv].concat(data.result);
+		
+					this.advs=result;
+					
+				},function(){
+				
+					this.unmask();
+					
+				});
+				
+			},
+			//加载所有计划下的创意
+			loadCreative:function(){
+						
+				this.creatives=[this.wait];
+		
+				this.mask();
+
+				var params = {
+					advId:this.advId,
+					campaignId:this.campaignId
+				}
+				
+				this.$http.get('/v1/adm/names/campaigns/{campaignId}/creatives',params).then(function(res){
+					
+					this.unmask();
+					
+					var data=res.data;
+					
+					if(data.ret!=1)
+						return;
+					
+					var result=[this.anyCreative].concat(data.result);
+		
+					this.creatives=result;
+					
+				},function(){
+				
+					this.unmask();
+					
+				});
+				
+			},
+			//加载广告主的计划
+			loadPlans:function(){
+				
+				if(this.appId=="-1"){
+	 				
+					this.plans=[this.empty];
+	 				
+	 				this.campaignId="-1";
+				
+	 				this.results=[];
+	 				
+	 				this.pageNum=1;
+	 				
+	 				this.total=0;
+	 			
+		 			return;
+	 			}
+	 		
+				this.mask();
+				
+				var resource = this.$resource('/v1/adm/names/campaigns');
+			
+				resource.get({advId:this.advId}).then(function(res){
+					
+					this.unmask();
+					
+					var data=res.data;
+					
+					if(data.ret!=1)
+						return;
+					
+					var result=[this.anyPlan].concat(data.result);
+				
+					this.plans=result;
+					
+					this.campaignId="-1";
+			
+					this.chrats=[];
+							
+					this.results=[];
+					
+					this.pageNum=1;
+	 				
+	 				this.total=0;
+				
+				},function(){
+				
+					this.unmask();
+					
+				});
+				
+			},
+			//加载分页数据
+			page:function(params){
+				
+				this.mask();
+			
+				params=params || {};
+				
+				params.startDate=moment(this.startDate).format("YYYY-MM-DD");
+				params.endDate=moment(this.endDate).format("YYYY-MM-DD");
+				
+				params.pageSize=this.pageSize;
+				params.pageNum=this.pageNum;
+
+				params.campaignId=this.campaignId;
+				params.creativeId=this.creativeId;
+				params.advId=this.advId;
+
+				var resource = this.$resource('/v1/adm/stats/adv/creativeOfDay/{pageNum}/{pageSize}');
+				
+				resource.get(params).then(function(res){
+				
+					this.unmask();
+					
+					var data=res.data;
+					
+					//Error
+					if(data.ret!=1){
+						
+						return;
+					}
+			
+					var result=data.result;
+					
+					//处理结果
+					this.pageNum=result.pageNum;
+					
+					this.pageSize=result.pageSize;
+					
+					this.total=result.total;
+					
+					this.results=result.list;
+					
+				},function(){
+				
+					this.unmask();
+					
+				});
+				
+			},
+			//加载所有
+			load:function(){
+	 	
+	 			if(this.appId=="-1" || this.advId=="-1"){
+	 	
+	 				this.results=[];
+	 				
+	 				this.pageNum=1;
+	 				
+	 				this.total=0;
+	 			
+		 			return;
+	 			}
+	 			 
+				this.mask();
+				
+	 			var params = params || {};
+	 			
+	 			params.startDate=this.startDate;
+				params.endDate=this.endDate;
+				
+				params.advId=this.advId;
+				params.campaignId=this.campaignId;
+				params.creativeId=this.creativeId;
+		
+				this.$http.get('/v1/adm/stats/adv/creativeOfDay',params).then(function(res){
+				
+					this.unmask();
+					
+					var data=res.data;
+					
+					if(data.ret!=1){
+					}
+					
+					var result=data.result;
+					
+					this.drawChart(result);
+					
+				},function(){
+					
+					this.unmask();
+					
+				});
+				
+				this.page(params);
+				
+			},
+			drawChart:function(result){
+			
+				var myChart = echarts.init(document.getElementById('chart'));
+			
+				var option = {
+				    tooltip : {
+				        trigger: 'axis',
+				        axisPointer:{
+				            show: true,
+				            type : 'cross',
+				            lineStyle: {
+				                type : 'dashed',
+				                width : 1
+				            }
+				        }
+				    },
+				    legend: {
+				    	top:"bottom",
+				        data:['请求数','展现数','点击数','点击率','千次展现收入']
+				    },
+				    toolbox: {
+				        show : true,
+				        feature : {
+				            mark : {show: false},
+				            dataView : {show: false, readOnly: false},
+				            magicType : {show: false, type: ['line', 'bar']},
+				            restore : {show: false},
+				            saveAsImage : {show: false}
+				        }
+				    },
+				    calculable : true,
+				    xAxis : [
+				    	{
+				            type : 'category',
+				            data : result.axisX,
+				            trigger: 'axis',
+					        axisPointer:{
+					            show: true,
+					            type : 'cross',
+					            lineStyle: {
+					                type : 'dashed',
+					                width : 1
+					            }
+					        }
+				        }
+				    ],
+				    yAxis : [
+				        {
+				            type : 'value',
+				            splitLine: {
+				                lineStyle: {
+				                    type: 'dashed'
+				                }
+
+            				}
+				        }
+				    ],
+				    series : [
+				        {
+				            name:'请求数',
+				            type:'line',
+				            data:result.numOfAdReq,
+				            lineStyle:{normal:{width:1}},
+				          	symbolSize:function(){return 10;}
+				        },
+				        {
+				            name:'展现数',
+				            type:'line',
+				            data:result.numOfAdImpressions,
+				            lineStyle:{normal:{width:1}},
+				          	symbolSize:function(){return 10;}
+				        },
+				        {
+				            name:'点击数',
+				            type:'line',
+				            data:result.numOfAdClicks,
+				            lineStyle:{normal:{width:1}},
+				          	symbolSize:function(){return 10;}
+				        },
+				        {
+				            name:'点击率',
+				            type:'line',
+				            data:result.ctr,
+				            lineStyle:{normal:{width:1}},
+				          	symbolSize:function(){return 10;}
+				        },
+				        {
+				            name:'千次展现收入',
+				            type:'line',
+				            data:result.cpm,
+				            lineStyle:{normal:{width:1}},
+				          	symbolSize:function(){return 10;}
+				        }
+				    ]
+				};
+				
+				// 使用刚指定的配置项和数据显示图表。
+        		myChart.setOption(option);
+        
+			}
+		}
+	};
+</script>
+
+<style lang="less">
+	
+	.adm-adv-data{
+		padding:15px 28px 30px;
+		background: white;
+	}
+
+	.adm-adv-data .crumbs-title{
+		margin:8px 0 0;
+	}
+	
+	.adm-adv-data .search-empty{
+		text-align:center;
+		padding:150px 0;
+		margin-bottom:20px;
+		border:1px solid #ddd;
+		border-top:none 0;
+	}
+	
+	.adm-adv-data .search-bar .form-group{
+		margin: 0 0 10px 15px;
+    	width: 20%;
+	}
+
+	.adm-adv-data .chart-bar{
+		height:400px;
+		margin-top: 20px;
+		border: 1px solid #ddd;
+		margin-bottom: 32px;
+	}
+	
+	.adm-adv-data .chart-empty{
+		padding-top:150px;
+		text-align:center;
+	}
+	
+	.adm-adv-data .chart-cnt{
+		height:100%;
+	}
+
+	.adm-adv-data .pager-box{
+		position:relative;
+	}
+
+	.adm-adv-data .pagination-summary{
+		margin-right:15px;
+		float:right !important;
+	}
+	
+	.adm-adv-data .btn-export{
+		position:absolute;
+		top: 0;
+	}
+</style>
